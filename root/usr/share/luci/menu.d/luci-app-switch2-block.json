@@ -1,5 +1,5 @@
 {
-	"admin/services/switch2-block": {
+	"admin/network/switch2-block": {
 		"title": "Switch 2 Blocker",
 		"order": 90,
 		"action": {
