@@ -1,6 +1,8 @@
 #!/bin/sh
 # Switch 2 Connection Spoof & Update Blocker core management script
 . /lib/functions.sh
+exec 9>/var/lock/switch2-block.lock
+flock -x 9
 
 CONF="switch2-block"
 CGI_DIR="/www_nintendo/cgi-bin"
@@ -110,10 +112,16 @@ cleanup_dhcp() {
 	uci -q delete dhcp.nintendo_dns
 	uci -q delete dhcp.switch2
 
-	while uci -q show dhcp | grep -q "dhcp\.@host\[[0-9]*\]\.tag='switch2'"; do
+	local guard=0
+	while [ $guard -lt 100 ] && uci -q show dhcp | grep -q "dhcp\.@host\[[0-9]*\]\.tag='switch2'"; do
 		local idx
 		idx=$(uci -q show dhcp | grep "dhcp\.@host\[[0-9]*\]\.tag='switch2'" | head -n1 | sed -E 's/.*@host\[([0-9]+)\].*/\1/')
-		[ -n "$idx" ] && uci -q delete dhcp.@host[$idx]
+		if [ -n "$idx" ]; then
+			uci -q delete dhcp.@host[$idx] || break
+		else
+			break
+		fi
+		guard=$((guard + 1))
 	done
 
 	if [ "$(uci -q get dhcp.main_dns._switch2_managed)" = "1" ]; then
@@ -236,7 +244,7 @@ apply_network() {
 apply_dhcp() {
 	local lan_ip="$1"
 	local spoof_ip="$2"
-	local domain="$3"
+	local domains="$3"
 	local force_dhcp="$4"
 
 	if ! uci -q get dhcp.main_dns >/dev/null; then
@@ -302,10 +310,24 @@ apply_dhcp() {
 	uci_set_if_diff dhcp nintendo_dns localuse '0'
 	uci_set_if_diff dhcp nintendo_dns rebind_protection '0'
 
-	if [ "$(uci -q get dhcp.nintendo_dns.address)" != "/${domain}/${spoof_ip}" ]; then
-		uci -q delete dhcp.nintendo_dns.address
-		uci add_list dhcp.nintendo_dns.address="/${domain}/${spoof_ip}"
+	uci -q delete dhcp.nintendo_dns.address
+	local added_domain=0
+	add_nintendo_domain() {
+	    local d="$1"
+	    [ -n "$d" ] && uci add_list dhcp.nintendo_dns.address="/${d}/${spoof_ip}" && added_domain=1
+	}
+	config_list_foreach global test_domain add_nintendo_domain
+	if [ "$added_domain" -eq 0 ] && [ -n "$domains" ]; then
+	    for d in $domains; do
+	        add_nintendo_domain "$d"
+	    done
 	fi
+	
+	# 兜底防止列表意外为空
+	if [ "$added_domain" -eq 0 ]; then
+	    uci add_list dhcp.nintendo_dns.address="/ctest.p01.ctest.srv.nintendo.net/${spoof_ip}"
+	fi
+
 	uci_add_list_unique dhcp nintendo_dns server '//'
 	uci_set_if_diff dhcp nintendo_dns leasefile '/tmp/dhcp.leases.nintendo'
 
@@ -317,10 +339,16 @@ apply_dhcp() {
 		uci add_list dhcp.switch2.dhcp_option="6,${spoof_ip}"
 	fi
 
-	while uci -q show dhcp | grep -q "dhcp\.@host\[[0-9]*\]\.tag='switch2'"; do
+	local guard=0
+	while [ $guard -lt 100 ] && uci -q show dhcp | grep -q "dhcp\.@host\[[0-9]*\]\.tag='switch2'"; do
 		local idx
 		idx=$(uci -q show dhcp | grep "dhcp\.@host\[[0-9]*\]\.tag='switch2'" | head -n1 | sed -E 's/.*@host\[([0-9]+)\].*/\1/')
-		[ -n "$idx" ] && uci -q delete dhcp.@host[$idx]
+		if [ -n "$idx" ]; then
+			uci -q delete dhcp.@host[$idx] || break
+		else
+			break
+		fi
+		guard=$((guard + 1))
 	done
 
 	add_host_entry() {
@@ -536,7 +564,10 @@ start_service() {
 	apply_uhttpd "$lan_ip" "$spoof_ip"
 	apply_firewall "$fw_mode"
 
-	ifup nintendo >/dev/null 2>&1
+	# 仅当 nintendo 接口尚未激活时才手动 ifup，避免与 netifd 自动重载冲突导致两次 up/down
+	if ! ifstatus nintendo 2>/dev/null | grep -q '"up": true'; then
+		ifup nintendo >/dev/null 2>&1
+	fi
 	sleep 1
 	/etc/init.d/dnsmasq restart
 	/etc/init.d/uhttpd restart
