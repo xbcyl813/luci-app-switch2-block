@@ -205,14 +205,14 @@ return view.extend({
 
 			var modalNode = ui.showModal(_('Self-Test Results'), [
 				E('div', { 'style': 'margin-bottom: 6px;' }, [
-					E('strong', {}, _('1. DNS Hijacking Status: ')),
+					E('strong', {}, _('1. DNS Hijacking Status:')),
 					E('span', { 'style': 'color:' + (dnsOk ? 'green' : 'red') + '; font-weight:bold;' },
 						dnsOk ? _('Normal (All %d domains resolved to %s)').format(curDomains.length, curSpoofIp) : _('Abnormal (Target IP not matched; check global DNS redirect or proxy hijacking)'))
 				]),
 				E('pre', { 'style': preBaseStyle + 'max-height:135px;' }, dnsOut || _('No output')),
 
 				E('div', { 'style': 'margin-bottom: 6px;' }, [
-					E('strong', {}, _('2. HTTP Spoof Status: ')),
+					E('strong', {}, _('2. HTTP Spoof Status:')),
 					E('span', { 'style': 'color:' + (httpOk ? 'green' : 'red') + '; font-weight:bold;' },
 						httpOk ? _('Normal (Returned 200 OK with exact 2-byte body "ok")') : _('Abnormal (Unexpected status or body length; current bytes: %s)').format(bodyLen))
 				]),
@@ -220,14 +220,14 @@ return view.extend({
 					(httpHeader ? httpHeader + '\n\n[Body: "' + body + '" | Bytes: ' + bodyLen + ']' : rawOut || _('No output'))),
 
 				E('div', { 'style': 'margin-bottom: 6px;' }, [
-					E('strong', {}, _('3. Port 80 Usage Check: ')),
+					E('strong', {}, _('3. Port 80 Usage Check:')),
 					E('span', { 'style': 'color:' + portStatusColor + '; font-weight:bold;' }, portStatusText)
 				]),
 				E('pre', { 'style': preBaseStyle + 'max-height:80px;' },
 					portOwner || _('No port 80 listener records detected')),
 
 				E('div', { 'style': 'margin-bottom: 6px;' }, [
-					E('strong', {}, _('4. Firewall Blocking Rules: ')),
+					E('strong', {}, _('4. Firewall Blocking Rules:')),
 					E('span', { 'style': 'color:' + fwStatusColor + '; font-weight:bold;' }, fwStatusText)
 				]),
 				E('pre', { 'style': preBaseStyle + 'max-height:150px;' },
