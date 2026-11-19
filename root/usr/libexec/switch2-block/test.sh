@@ -2,20 +2,27 @@
 
 SPOOF_IP="$1"
 shift
-DOMAINS="$*"
-
-[ -z "$SPOOF_IP" ] && SPOOF_IP=$(uci -q get switch2-block.global.spoof_ip)
-[ -z "$DOMAINS" ] && DOMAINS=$(uci -q get switch2-block.global.test_domain)
-[ -z "$DOMAINS" ] && DOMAINS="ctest.p01.ctest.srv.nintendo.net"
-
-FIRST_DOMAIN=$(echo "$DOMAINS" | awk '{print $1}')
 
 echo "=== DNS_RESULT ==="
-for d in $DOMAINS; do
-	nslookup -type=A "$d" "$SPOOF_IP" 2>&1
+first_dns=1
+for domain in "$@"; do
+	[ -z "$domain" ] && continue
+	out=$(nslookup "$domain" "$SPOOF_IP" 2>&1 | grep -v "can't find.*REFUSED" | sed '/^[[:space:]]*$/d')
+	if [ "$first_dns" -eq 1 ]; then
+		echo "$out" | sed 's/^Name:/\nName:/'
+		first_dns=0
+	else
+		echo ""
+		if echo "$out" | grep -q "^Name:"; then
+			echo "$out" | awk '/^Name:/{found=1} found{print}'
+		else
+			echo "$out"
+		fi
+	fi
 done
 
 echo "=== HTTP_HEADER ==="
+
 curl -s -i --noproxy '*' --connect-timeout 3 -m 5 -H "Host: $FIRST_DOMAIN" "http://$SPOOF_IP" 2>&1 | tr -d '\r' | sed '/^$/q'
 
 echo "=== HTTP_BODY_LEN ==="
