@@ -209,7 +209,7 @@ return view.extend({
 					E('span', { 'style': 'color:' + (dnsOk ? 'green' : 'red') + '; font-weight:bold;' },
 						dnsOk ? _('Normal (All %d domains resolved to %s)').format(curDomains.length, curSpoofIp) : _('Abnormal (Target IP not matched; check global DNS redirect or proxy hijacking)'))
 				]),
-				E('pre', { 'style': preBaseStyle + 'max-height:135px;' }, dnsOut || _('No output')),
+				E('pre', { 'style': preBaseStyle + 'max-height:185px;' }, dnsOut || _('No output')),
 
 				E('div', { 'style': 'margin-bottom: 6px;' }, [
 					E('strong', {}, _('2. HTTP Spoof Status:')),
