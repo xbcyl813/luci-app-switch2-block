@@ -21,7 +21,7 @@ return view.extend({
 		if (Array.isArray(rawIp)) {
 			rawIp = rawIp[0] || '';
 		}
-		var detectedLanIp = String(rawIp).trim().split(/\s+/)[0].split('/')[0];
+		var detectedLanIp = String(rawIp).trim().split(' ')[0].split('/')[0];
 		var detectedSpoofIp = '';
 		var prefix = '';
 
@@ -43,15 +43,30 @@ return view.extend({
 		var savedForceDhcp = uci.get('switch2-block', 'global', 'force_dhcp') || '0';
 		var savedLanIp = uci.get('switch2-block', 'global', 'lan_ip') || netDefaults.lanIp || '';
 		var savedSpoofIp = uci.get('switch2-block', 'global', 'spoof_ip') || netDefaults.spoofIp || '';
-		var savedDomain = uci.get('switch2-block', 'global', 'test_domain') || 'ctest.p01.ctest.srv.nintendo.net';
 		var savedFwMode = uci.get('switch2-block', 'global', 'fw_mode') || 'firewall_user';
+
+		var rawSavedDomains = uci.get('switch2-block', 'global', 'test_domain');
+		var savedDomains = Array.isArray(rawSavedDomains)
+			? rawSavedDomains
+			: (rawSavedDomains ? [rawSavedDomains] : ['ctest.p01.ctest.srv.nintendo.net']);
 
 		var curEnabled = enableOpt ? enableOpt.formvalue('global') : savedEnabled;
 		var curForceDhcp = forceDhcpOpt ? forceDhcpOpt.formvalue('global') : savedForceDhcp;
 		var curLanIp = lanOpt ? (lanOpt.formvalue('global') || savedLanIp) : savedLanIp;
 		var curSpoofIp = spoofOpt ? (spoofOpt.formvalue('global') || savedSpoofIp) : savedSpoofIp;
-		var curDomain = domainOpt ? (domainOpt.formvalue('global') || savedDomain) : savedDomain;
 		var curFwMode = fwModeOpt ? (fwModeOpt.formvalue('global') || savedFwMode) : savedFwMode;
+
+		var rawCurDomains = domainOpt ? domainOpt.formvalue('global') : savedDomains;
+		if (!Array.isArray(rawCurDomains)) {
+			rawCurDomains = rawCurDomains ? [rawCurDomains] : [];
+		}
+		var curDomains = [];
+		for (var i = 0; i < rawCurDomains.length; i++) {
+			var d = String(rawCurDomains[i] || '').trim();
+			if (d !== '') {
+				curDomains.push(d);
+			}
+		}
 
 		if (curEnabled !== '1') {
 			ui.addNotification(null, E('p', _('Spoof & Blocker is currently disabled. Please enable it and click Save & Apply first.')), 'warning');
@@ -66,7 +81,7 @@ return view.extend({
 			curForceDhcp !== savedForceDhcp ||
 			curLanIp !== savedLanIp ||
 			curSpoofIp !== savedSpoofIp ||
-			curDomain !== savedDomain ||
+			JSON.stringify(curDomains) !== JSON.stringify(savedDomains) ||
 			curFwMode !== savedFwMode) {
 			ui.addNotification(null, E('p', _('Unsaved changes detected on this page or device list. Please click Save & Apply before running self-test!')), 'warning');
 			return;
@@ -77,15 +92,23 @@ return view.extend({
 			return;
 		}
 
+		if (curDomains.length === 0) {
+			curDomains = ['ctest.p01.ctest.srv.nintendo.net'];
+		}
+
 		var devices = uci.sections('switch2-block', 'device') || [];
-		var hasBlockDevice = devices.some(function(dev) {
-			return dev.mac && (dev.block_wan === '1' || dev.block_wan === undefined);
-		});
+		var hasBlockDevice = false;
+		for (var idx = 0; idx < devices.length; idx++) {
+			var dev = devices[idx];
+			if (dev.mac && (dev.block_wan === '1' || dev.block_wan === undefined)) {
+				hasBlockDevice = true;
+				break;
+			}
+		}
 
 		ui.showModal(_('Running Connectivity Self-Test...'), [
 			E('p', { 'class': 'spinning' }, _('Calling test.sh to verify DNS hijacking, uHTTPd 2-byte response, port 80 usage, and firewall rules...'))
 		]);
-
 		var targetFwFile = (isFw4 && curFwMode === 'nftables_d')
 			? '/etc/nftables.d/99-switch2-block.nft'
 			: '/etc/firewall.user';
@@ -97,7 +120,7 @@ return view.extend({
 		});
 
 		return Promise.all([
-			fs.exec('/usr/libexec/switch2-block/test.sh', [curSpoofIp, curDomain]),
+			fs.exec('/usr/libexec/switch2-block/test.sh', [curSpoofIp].concat(curDomains)),
 			checkFwRule
 		]).then(function(results) {
 			var res = results[0];
@@ -105,12 +128,12 @@ return view.extend({
 			var rawOut = (res.stdout || '') + (res.stderr || '');
 			var dnsOut = '', httpHeader = '', bodyLen = '0', body = '', portOwner = '', fwActiveRules = '';
 
-			var mDns = rawOut.match(/=== DNS_RESULT ===\n([\s\S]*?)\n=== HTTP_HEADER ===/);
-			var mHdr = rawOut.match(/=== HTTP_HEADER ===\n([\s\S]*?)\n=== HTTP_BODY_LEN ===/);
-			var mLen = rawOut.match(/=== HTTP_BODY_LEN ===\n([\s\S]*?)\n=== HTTP_BODY ===/);
-			var mBody = rawOut.match(/=== HTTP_BODY ===\n([\s\S]*?)\n=== HTTP_PORT_OWNER ===/);
-			var mPort = rawOut.match(/=== HTTP_PORT_OWNER ===\n([\s\S]*?)\n=== FW_ACTIVE_RULES ===/);
-			var mFw = rawOut.match(/=== FW_ACTIVE_RULES ===\n([\s\S]*)$/);
+			var mDns = rawOut.match(new RegExp('=== DNS_RESULT ===\\n([\\s\\S]*?)\\n=== HTTP_HEADER ==='));
+			var mHdr = rawOut.match(new RegExp('=== HTTP_HEADER ===\\n([\\s\\S]*?)\\n=== HTTP_BODY_LEN ==='));
+			var mLen = rawOut.match(new RegExp('=== HTTP_BODY_LEN ===\\n([\\s\\S]*?)\\n=== HTTP_BODY ==='));
+			var mBody = rawOut.match(new RegExp('=== HTTP_BODY ===\\n([\\s\\S]*?)\\n=== HTTP_PORT_OWNER ==='));
+			var mPort = rawOut.match(new RegExp('=== HTTP_PORT_OWNER ===\\n([\\s\\S]*?)\\n=== FW_ACTIVE_RULES ==='));
+			var mFw = rawOut.match(new RegExp('=== FW_ACTIVE_RULES ===\\n([\\s\\S]*)$'));
 
 			if (mDns && mDns[1]) dnsOut = mDns[1].trim();
 			if (mHdr && mHdr[1]) httpHeader = mHdr[1].trim();
@@ -119,17 +142,30 @@ return view.extend({
 			if (mPort && mPort[1]) portOwner = mPort[1].trim();
 			if (mFw && mFw[1]) fwActiveRules = mFw[1].trim();
 
-			var fwRuleLines = fwActiveRules ? fwActiveRules.split('\n').filter(function(line) { return line.trim() !== ''; }) : [];
+			var fwRuleLines = [];
+			if (fwActiveRules) {
+				var rawLines = fwActiveRules.split('\n');
+				for (var j = 0; j < rawLines.length; j++) {
+					if (rawLines[j].trim() !== '') {
+						fwRuleLines.push(rawLines[j]);
+					}
+				}
+			}
 			var fwActiveCount = fwRuleLines.length;
 
-			// 1. 剥离前两行的 Server/Address 头部，仅检测 Name: 之后的实际解析应答部分
-			var answerPart = dnsOut.split(/Name:/i).slice(1).join('Name:');
-			var dnsOk = answerPart.indexOf(curSpoofIp) !== -1;
+			var answerParts = dnsOut.split('Name:').slice(1);
+			var dnsOk = (answerParts.length >= curDomains.length);
+			if (dnsOk) {
+				for (var k = 0; k < answerParts.length; k++) {
+					if (answerParts[k].indexOf(curSpoofIp) === -1) {
+						dnsOk = false;
+						break;
+					}
+				}
+			}
 
-			// 2. HTTP 响应校验
 			var httpOk = httpHeader.indexOf('200 OK') !== -1 && body === 'ok' && bodyLen === '2';
 
-			// 3. 独立解析 80 端口监听归属状态
 			var portStatusColor, portStatusText;
 			if (!portOwner) {
 				portStatusColor = '#d9534f';
@@ -138,13 +174,18 @@ return view.extend({
 				portStatusColor = 'green';
 				portStatusText = _('Normal (Exclusively bound by uHTTPd on %s:80, no port conflict)').format(curSpoofIp);
 			} else {
-				var procMatch = portOwner.match(/\(\("([^"]+)"/);
-				var procName = procMatch ? procMatch[1] : _('Other Web Service');
+				var procName = _('Other Web Service');
+				var pStart = portOwner.indexOf('(("');
+				if (pStart !== -1) {
+					var pEnd = portOwner.indexOf('"', pStart + 3);
+					if (pEnd !== -1) {
+						procName = portOwner.substring(pStart + 3, pEnd);
+					}
+				}
 				portStatusColor = '#d9534f';
 				portStatusText = _('Conflict: Port 80 is globally occupied by "%s"! Please bind it only to Main LAN IP (%s:80)').format(procName, curLanIp);
 			}
 
-			// 4. 防火墙阻断规则状态
 			var fwStatusColor, fwStatusText;
 			if (!hasBlockDevice) {
 				fwStatusColor = 'green';
@@ -166,9 +207,9 @@ return view.extend({
 				E('div', { 'style': 'margin-bottom: 6px;' }, [
 					E('strong', {}, _('1. DNS Hijacking Status: ')),
 					E('span', { 'style': 'color:' + (dnsOk ? 'green' : 'red') + '; font-weight:bold;' },
-						dnsOk ? _('Normal (Resolved to %s)').format(curSpoofIp) : _('Abnormal (Target IP not matched; check global DNS redirect or proxy hijacking)'))
+						dnsOk ? _('Normal (All %d domains resolved to %s)').format(curDomains.length, curSpoofIp) : _('Abnormal (Target IP not matched; check global DNS redirect or proxy hijacking)'))
 				]),
-				E('pre', { 'style': preBaseStyle + 'max-height:110px;' }, dnsOut || _('No output')),
+				E('pre', { 'style': preBaseStyle + 'max-height:135px;' }, dnsOut || _('No output')),
 
 				E('div', { 'style': 'margin-bottom: 6px;' }, [
 					E('strong', {}, _('2. HTTP Spoof Status: ')),
@@ -189,7 +230,7 @@ return view.extend({
 					E('strong', {}, _('4. Firewall Blocking Rules: ')),
 					E('span', { 'style': 'color:' + fwStatusColor + '; font-weight:bold;' }, fwStatusText)
 				]),
-				E('pre', { 'style': preBaseStyle + 'max-height:140px;' },
+				E('pre', { 'style': preBaseStyle + 'max-height:150px;' },
 					fwActiveRules || _('No active Switch 2 blocking rules found in kernel firewall')),
 
 				E('div', { 'class': 'right', 'style': 'margin-top: 12px;' }, [
@@ -200,7 +241,6 @@ return view.extend({
 				])
 			]);
 
-			// 动态拓宽 LuCI 模态弹窗容器，防止长文本折行
 			if (modalNode) {
 				modalNode.style.maxWidth = '860px';
 				modalNode.style.width = '92vw';
@@ -281,10 +321,10 @@ return view.extend({
 			return true;
 		};
 
-		domainOpt = s.option(form.Value, 'test_domain', _('Nintendo Connection Test Domain'),
-			_('Defaults to ctest.p01.ctest.srv.nintendo.net. Usually no need to change.'));
+		domainOpt = s.option(form.DynamicList, 'test_domain', _('Nintendo Connection Test Domains'),
+			_('Supports multiple domains (e.g. Switch 2: ctest.p01.ctest.srv.nintendo.net, Switch 1: ctest.cdn.nintendo.net).'));
 		domainOpt.datatype = 'hostname';
-		domainOpt.default = 'ctest.p01.ctest.srv.nintendo.net';
+		domainOpt.default = ['ctest.p01.ctest.srv.nintendo.net'];
 		domainOpt.placeholder = 'ctest.p01.ctest.srv.nintendo.net';
 		domainOpt.rmempty = false;
 
