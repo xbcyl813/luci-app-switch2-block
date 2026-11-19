@@ -1,23 +1,29 @@
 #!/bin/sh
 
 SPOOF_IP="$1"
-DOMAIN="$2"
+shift
+DOMAINS="$*"
 
 [ -z "$SPOOF_IP" ] && SPOOF_IP=$(uci -q get switch2-block.global.spoof_ip)
-[ -z "$DOMAIN" ] && DOMAIN="ctest.p01.ctest.srv.nintendo.net"
+[ -z "$DOMAINS" ] && DOMAINS=$(uci -q get switch2-block.global.test_domain)
+[ -z "$DOMAINS" ] && DOMAINS="ctest.p01.ctest.srv.nintendo.net"
+
+FIRST_DOMAIN=$(echo "$DOMAINS" | awk '{print $1}')
 
 echo "=== DNS_RESULT ==="
-nslookup -type=A "$DOMAIN" "$SPOOF_IP" 2>&1
+for d in $DOMAINS; do
+	nslookup -type=A "$d" "$SPOOF_IP" 2>&1
+done
 
 echo "=== HTTP_HEADER ==="
-curl -s -i --noproxy '*' --connect-timeout 3 -m 5 -H "Host: $DOMAIN" "http://$SPOOF_IP" 2>&1 | tr -d '\r' | sed '/^$/q'
+curl -s -i --noproxy '*' --connect-timeout 3 -m 5 -H "Host: $FIRST_DOMAIN" "http://$SPOOF_IP" 2>&1 | tr -d '\r' | sed '/^$/q'
 
 echo "=== HTTP_BODY_LEN ==="
-curl -s --noproxy '*' --connect-timeout 3 -m 5 -H "Host: $DOMAIN" "http://$SPOOF_IP" 2>/dev/null | wc -c | tr -d ' \n'
+curl -s --noproxy '*' --connect-timeout 3 -m 5 -H "Host: $FIRST_DOMAIN" "http://$SPOOF_IP" 2>/dev/null | wc -c | tr -d ' \n'
 
 echo ""
 echo "=== HTTP_BODY ==="
-curl -s --noproxy '*' --connect-timeout 3 -m 5 -H "Host: $DOMAIN" "http://$SPOOF_IP" 2>/dev/null
+curl -s --noproxy '*' --connect-timeout 3 -m 5 -H "Host: $FIRST_DOMAIN" "http://$SPOOF_IP" 2>/dev/null
 
 echo ""
 echo "=== HTTP_PORT_OWNER ==="
