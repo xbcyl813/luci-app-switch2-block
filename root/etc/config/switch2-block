@@ -4,7 +4,7 @@ config global 'global'
 	option fw_mode 'nftables_d'
 	option lan_ip ''
 	option spoof_ip ''
-	option test_domain 'ctest.p01.ctest.srv.nintendo.net'
+	list test_domain 'ctest.p01.ctest.srv.nintendo.net'
 
 config device
 	option name 'Switch2'
