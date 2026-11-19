@@ -16,11 +16,11 @@ Allows Switch 2 / Switch 1 to pass the local network connection test while compl
 
 ## II. Screenshots
 
-<img width="2174" height="1786" alt="01 Main Interface" src="https://github.com/user-attachments/assets/133947c3-a269-45c5-849b-2054f2ede62a" />
+<img width="2174" height="1786" alt="01 Main Interface" src="https://github.com/user-attachments/assets/d02f63b0-b3bf-45ac-9c71-a616efbb03eb" />
 
 <img width="815" height="290" alt="02 Switch2 Settings" src="https://github.com/user-attachments/assets/c483d9ef-bb61-4f4b-a510-7ac9f33f5409" />
 
-<img width="550" height="360" alt="03 Plugin Self-Check" src="https://github.com/user-attachments/assets/d2eb1876-ea19-4803-8701-a3a904b70899" />
+<img width="550" height="360" alt="03 Plugin Self-Check" src="https://github.com/user-attachments/assets/e763ff7a-73c6-4f99-b94e-189d871a3a00" />
 
 ## III. Important Notes
 
