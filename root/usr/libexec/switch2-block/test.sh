@@ -7,7 +7,7 @@ echo "=== DNS_RESULT ==="
 first_dns=1
 for domain in "$@"; do
 	[ -z "$domain" ] && continue
-	out=$(nslookup "$domain" "$SPOOF_IP" 2>&1 | grep -v "can't find.*REFUSED" | sed '/^[[:space:]]*$/d')
+	out=$(nslookup "$domain" "$SPOOF_IP" 2>&1 | grep -viE "can't find.*(REFUSED|No answer)" | sed '/^[[:space:]]*$/d')
 	if [ "$first_dns" -eq 1 ]; then
 		echo "$out" | sed 's/^Name:/\nName:/'
 		first_dns=0
