@@ -15,7 +15,7 @@ log_msg() {
 }
 
 is_fw4() {
-	[ -x /sbin/fw4 ] || command -v fw4 >/dev/null 2>&1 || command -v nft >/dev/null 2>&1
+	[ -x /sbin/fw4 ] || command -v fw4 >/dev/null 2>&1
 }
 
 # 动态探测当前路由器真实 LAN IP（消除任何硬编码 IP）
