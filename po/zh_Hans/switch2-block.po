@@ -90,8 +90,11 @@ msgstr "立即测试伪装服务"
 msgid "Controlled Devices (MAC-based DNS & Firewall Isolation)"
 msgstr "受控主机列表 (MAC 精准下发与防火墙兜底)"
 
-msgid "Listed devices set to Automatic (DHCP) will receive the dedicated spoof DNS and optional WAN isolation."
-msgstr "列出的设备在 Wi-Fi 设置为「自动获取 (DHCP)」时，将自动分配专属伪装 DNS，并可选通过防火墙彻底封禁外网访问。"
+msgid "Listed devices set to Automatic (DHCP) will receive the dedicated spoof DNS and optional WAN isolation. If this list is left empty while enabled, the plugin runs in Manual DNS Mode: you must manually set a static IP and use the Spoof Helper IP as DNS on your Switch (note: firewall-level MAC blocking will not apply)."
+msgstr "列出的设备在 Wi-Fi 设置为「自动获取 (DHCP)」时，将自动分配专属伪装 DNS，并可选通过防火墙彻底封禁外网访问。若启用插件但将此列表留空，系统将运行在「纯手动 DNS 模式」：您需要在 Switch 上手动设置静态 IP 并将 DNS 填为伪装辅助 IP（注意：未填写 MAC 时防火墙级断外网兜底不会生效）。"
+
+msgid "No MAC address configured. Running in Manual DNS Mode: please manually assign a static IP on your Switch and set its DNS to %s. Note that firewall-level WAN blocking is inactive without a MAC address."
+msgstr "未配置受控设备 MAC 地址，已进入「纯手动 DNS 模式」：请在 Switch 上手动指定可用静态 IP，并将 DNS 设置为 %s。请注意：未登记 MAC 时，路由器防火墙层的硬阻断规则不会生效。"
 
 msgid "Device Name"
 msgstr "设备备注"
@@ -209,3 +212,9 @@ msgstr "关闭"
 
 msgid "Self-test execution failed: "
 msgstr "检测执行失败: "
+
+msgid "Default example MAC (11:22:33:44:55:66) is still in the device list! Please replace it with your real Switch MAC address before saving."
+msgstr "受控主机列表中仍存在默认示例 MAC（11:22:33:44:55:66）！请先将其修改为您的 Switch 真实 MAC 地址后再保存并应用。"
+
+msgid "Please add at least one Switch MAC address in the Controlled Devices list before enabling!"
+msgstr "启用保护前，请至少在「受控主机列表」中添加一台 Switch 设备的 MAC 地址！"
