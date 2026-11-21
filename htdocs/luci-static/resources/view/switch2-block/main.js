@@ -195,7 +195,13 @@ return view.extend({
 				fwStatusText = _('Written to %s and active in kernel firewall (%d rules)').format(targetFwFile, fwActiveCount);
 			} else if (fwRuleInFile && fwActiveCount === 0) {
 				fwStatusColor = '#d9534f';
-				fwStatusText = _('Written to %s, but not loaded in kernel! Try switching firewall rule mode and re-applying').format(targetFwFile);
+				if (isFw4 && curFwMode === 'nftables_d') {
+					fwStatusText = _('Written to %s, but not loaded by kernel! Please switch "fw4 Firewall Rule Mode" to "/etc/firewall.user" and Save & Apply.').format(targetFwFile);
+				} else if (isFw4 && curFwMode === 'firewall_user') {
+					fwStatusText = _('Written to %s, but not loaded by kernel! Please switch "fw4 Firewall Rule Mode" to "/etc/nftables.d/" and Save & Apply.').format(targetFwFile);
+				} else {
+					fwStatusText = _('Written to %s, but not loaded by kernel! Please check if the firewall service is running properly.').format(targetFwFile);
+				}
 			} else {
 				fwStatusColor = '#f0ad4e';
 				fwStatusText = _('No blocking rules found in %s (Please ensure Save & Apply was clicked)').format(targetFwFile);
