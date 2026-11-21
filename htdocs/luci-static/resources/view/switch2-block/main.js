@@ -342,21 +342,21 @@ return view.extend({
 			return this.handleTestSpoof(m, enableOpt, forceDhcpOpt, lanOpt, spoofOpt, domainOpt, fwModeOpt, isFw4, netDefaults);
 		}, this);
 
-		s = m.section(form.GridSection, 'device', _('Controlled Devices (MAC-based DNS & Firewall Isolation)'),
-			_('Listed devices set to Automatic (DHCP) will receive the dedicated spoof DNS and optional WAN isolation.'));
-		s.addremove = true;
-		s.anonymous = true;
+		var s2 = m.section(form.GridSection, 'device', _('Controlled Devices (MAC-based DNS & Firewall Isolation)'),
+			_('Listed devices set to Automatic (DHCP) will receive the dedicated spoof DNS and optional WAN isolation. If this list is left empty while enabled, the plugin runs in Manual DNS Mode: you must manually set a static IP and use the Spoof Helper IP as DNS on your Switch (note: firewall-level MAC blocking will not apply).'));
+		s2.addremove = true;
+		s2.anonymous = true;
 
-		o = s.option(form.Value, 'name', _('Device Name'));
+		o = s2.option(form.Value, 'name', _('Device Name'));
 		o.placeholder = 'Switch2';
 		o.rmempty = false;
 
-		o = s.option(form.Value, 'mac', _('MAC Address'));
-		o.datatype = 'macaddr';
-		o.placeholder = '11:22:33:44:55:66';
-		o.rmempty = false;
+		var macOpt = s2.option(form.Value, 'mac', _('MAC Address'));
+		macOpt.datatype = 'macaddr';
+		macOpt.placeholder = '11:22:33:44:55:66';
+		macOpt.rmempty = false;
 
-		o = s.option(form.Value, 'ip', _('Static IP (Optional)'),
+		o = s2.option(form.Value, 'ip', _('Static IP (Optional)'),
 			_('Leave blank for dynamic DHCP assignment with dedicated spoof DNS.'));
 		o.datatype = 'ip4addr';
 		o.placeholder = netDefaults.prefix ? _('Auto-assign (e.g., %s.x)').format(netDefaults.prefix) : _('Auto-assign');
@@ -378,11 +378,53 @@ return view.extend({
 			return true;
 		};
 
-		o = s.option(form.Flag, 'block_wan', _('Block WAN via Firewall'),
+		o = s2.option(form.Flag, 'block_wan', _('Block WAN via Firewall'),
 			_('Inject firewall rules to block IPv6 ICMPv6 and all IPv4/IPv6 WAN forwarding for this MAC to prevent hardcoded IP leaks.'));
 		o.default = '1';
 		o.rmempty = false;
 
+		var origSaveApply = this.handleSaveApply;
+		this.handleSaveApply = function(ev, mode) {
+			var curEnabled = enableOpt.formvalue('global');
+			var curSpoofIp = String(spoofOpt.formvalue('global') || '').trim();
+			if (curEnabled === '1') {
+				var devSections = uci.sections('switch2-block', 'device');
+				var hasDefaultMac = false;
+				var validCount = 0;
+
+				for (var i = 0; i < devSections.length; i++) {
+					var sid = devSections[i]['.name'];
+					var valMac = macOpt.formvalue(sid);
+					if (valMac === undefined || valMac === null) {
+						valMac = devSections[i].mac;
+					}
+					var cleanMac = String(valMac || '').trim().toUpperCase();
+					if (cleanMac === '11:22:33:44:55:66') {
+						hasDefaultMac = true;
+						break;
+					}
+					if (cleanMac !== '') {
+						validCount++;
+					}
+				}
+
+				if (hasDefaultMac) {
+					ui.addNotification(null, E('p', { 'style': 'color:#d9534f; font-weight:bold;' },
+						_('Default example MAC (11:22:33:44:55:66) is still in the device list! Please replace it with your real Switch MAC address before saving.')
+					), 'error');
+					return Promise.reject(new Error('Default example MAC not allowed'));
+				}
+
+				if (validCount === 0) {
+					ui.addNotification(null, E('p', {},
+						_('No MAC address configured. Running in Manual DNS Mode: please manually assign a static IP on your Switch and set its DNS to %s. Note that firewall-level WAN blocking is inactive without a MAC address.').format(curSpoofIp || 'Spoof Helper IP')
+					), 'info');
+				}
+			}
+			return origSaveApply.call(this, ev, mode);
+		};
+
 		return m.render();
+
 	}
 });
