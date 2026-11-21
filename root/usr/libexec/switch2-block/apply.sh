@@ -572,6 +572,19 @@ start_service() {
 	/etc/init.d/dnsmasq restart
 	/etc/init.d/uhttpd restart
 	/etc/init.d/firewall restart
+	
+	# 兜底检测：若选择了 nftables_d 模式，但固件未自动 include /etc/nftables.d/，则手动注入 table inet fw4
+	if is_fw4 && [ "$fw_mode" = "nftables_d" ] && [ -s "$NFT_D_FILE" ]; then
+		if ! nft list table inet fw4 2>/dev/null | grep -q "switch2_block_forward"; then
+			log_msg "fw4 did not auto-include $NFT_D_FILE, injecting manually into inet fw4"
+			{
+				echo "table inet fw4 {"
+				cat "$NFT_D_FILE"
+				echo "}"
+			} | nft -f - 2>/dev/null
+		fi
+	fi
+	
 	reload_proxy_fw
 }
 
@@ -602,6 +615,15 @@ reload_nft_only() {
 	if [ "$enabled" -eq 1 ]; then
 		apply_firewall "$fw_mode"
 		/etc/init.d/firewall restart
+		if is_fw4 && [ "$fw_mode" = "nftables_d" ] && [ -s "$NFT_D_FILE" ]; then
+			if ! nft list table inet fw4 2>/dev/null | grep -q "switch2_block_forward"; then
+				{
+					echo "table inet fw4 {"
+					cat "$NFT_D_FILE"
+					echo "}"
+				} | nft -f - 2>/dev/null
+			fi
+		fi
 		reload_proxy_fw
 	fi
 }
