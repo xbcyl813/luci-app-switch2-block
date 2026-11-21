@@ -409,7 +409,7 @@ return view.extend({
 				}
 
 				if (hasDefaultMac) {
-					ui.addNotification(null, E('p', { 'style': 'color:#d9534f; font-weight:bold;' },
+					ui.addNotification(null, E('p', { 'style': 'font-weight:bold;' },
 						_('Default example MAC (11:22:33:44:55:66) is still in the device list! Please replace it with your real Switch MAC address before saving.')
 					), 'error');
 					return Promise.reject(new Error('Default example MAC not allowed'));
