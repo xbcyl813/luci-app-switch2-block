@@ -168,8 +168,14 @@ msgstr "已跳过 (受控列表未启用断外网设备)"
 msgid "Written to %s and active in kernel firewall (%d rules)"
 msgstr "已写入 %s 且内核防火墙已实时生效 (共 %d 条规则)"
 
-msgid "Written to %s, but not loaded in kernel! Try switching firewall rule mode and re-applying"
-msgstr "规则已写入 %s，但内核防火墙未加载！建议切换规则写入方式后重新保存"
+msgid "Written to %s, but not loaded by kernel! Please switch \"fw4 Firewall Rule Mode\" to \"/etc/firewall.user\" and Save & Apply."
+msgstr "规则已写入 %s，但当前固件内核未自动加载！请在「fw4 防火墙规则写入方式」中切换为「写入 /etc/firewall.user 自定义规则文件」后重新保存并应用。"
+
+msgid "Written to %s, but not loaded by kernel! Please switch \"fw4 Firewall Rule Mode\" to \"/etc/nftables.d/\" and Save & Apply."
+msgstr "规则已写入 %s，但内核防火墙未加载！请在「fw4 防火墙规则写入方式」中切换为「写入 /etc/nftables.d/ 原生规则目录」后重新保存并应用。"
+
+msgid "Written to %s, but not loaded by kernel! Please check if the firewall service is running properly."
+msgstr "规则已写入 %s，但内核防火墙未加载！请检查系统 firewall 服务是否正常运行。"
 
 msgid "No blocking rules found in %s (Please ensure Save & Apply was clicked)"
 msgstr "未在 %s 检测到阻断规则 (请确认已点击「保存并应用」)"
