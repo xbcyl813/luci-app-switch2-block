@@ -42,7 +42,7 @@ fi
 
 echo ""
 echo "=== FW_ACTIVE_RULES ==="
-if [ -x /sbin/fw4 ] || command -v fw4 >/dev/null 2>&1 || command -v nft >/dev/null 2>&1; then
+if [ -x /sbin/fw4 ] || command -v fw4 >/dev/null 2>&1; then
 	nft list ruleset 2>/dev/null | grep "Block_Switch2_" | sed 's/^[ \t]*//'
 else
 	{
