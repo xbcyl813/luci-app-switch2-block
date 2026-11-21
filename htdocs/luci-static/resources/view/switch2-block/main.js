@@ -385,8 +385,10 @@ return view.extend({
 
 		var origSaveApply = this.handleSaveApply;
 		this.handleSaveApply = function(ev, mode) {
+			var self = this;
 			var curEnabled = enableOpt.formvalue('global');
 			var curSpoofIp = String(spoofOpt.formvalue('global') || '').trim();
+
 			if (curEnabled === '1') {
 				var devSections = uci.sections('switch2-block', 'device');
 				var hasDefaultMac = false;
@@ -409,19 +411,48 @@ return view.extend({
 				}
 
 				if (hasDefaultMac) {
-					ui.addNotification(null, E('p', { 'style': 'font-weight:bold;' },
-						_('Default example MAC (11:22:33:44:55:66) is still in the device list! Please replace it with your real Switch MAC address before saving.')
-					), 'error');
+					ui.showModal(_('Configuration Error'), [
+						E('p', { 'style': 'font-weight:bold; font-size:14px; line-height:1.6;' },
+							_('Default example MAC (11:22:33:44:55:66) is still in the device list! Please replace it with your real Switch MAC address before saving.')
+						),
+						E('div', { 'class': 'right', 'style': 'margin-top: 15px;' }, [
+							E('button', {
+								'class': 'btn cbi-button-negative important',
+								'click': ui.hideModal
+							}, _('Close'))
+						])
+					]);
 					return Promise.reject(new Error('Default example MAC not allowed'));
 				}
 
 				if (validCount === 0) {
-					ui.addNotification(null, E('p', {},
-						_('No MAC address configured. Running in Manual DNS Mode: please manually assign a static IP on your Switch and set its DNS to %s. Note that firewall-level WAN blocking is inactive without a MAC address.').format(curSpoofIp || 'Spoof Helper IP')
-					), 'info');
+					return new Promise(function(resolve, reject) {
+						ui.showModal(_('Manual DNS Mode Notice'), [
+							E('p', { 'style': 'font-size:14px; line-height:1.6;' },
+								_('No MAC address configured. Running in Manual DNS Mode: please manually assign a static IP on your Switch and set its DNS to %s. Note that firewall-level WAN blocking is inactive without a MAC address.').format(curSpoofIp || 'Spoof Helper IP')
+							),
+							E('div', { 'class': 'right', 'style': 'margin-top: 15px;' }, [
+								E('button', {
+									'class': 'btn cbi-button-neutral',
+									'style': 'margin-right: 8px;',
+									'click': function() {
+										ui.hideModal();
+										reject(new Error('User cancelled manual DNS mode save'));
+									}
+								}, _('Cancel')),
+								E('button', {
+									'class': 'btn cbi-button-action important',
+									'click': function() {
+										ui.hideModal();
+										resolve(origSaveApply.call(self, ev, mode));
+									}
+								}, _('Confirm & Save'))
+							])
+						]);
+					});
 				}
 			}
-			return origSaveApply.call(this, ev, mode);
+			return origSaveApply.call(self, ev, mode);
 		};
 
 		return m.render();
