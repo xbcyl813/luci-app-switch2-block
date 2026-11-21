@@ -10,8 +10,8 @@ return view.extend({
 		return Promise.all([
 			uci.load('switch2-block'),
 			uci.load('network').catch(function() { return null; }),
-			fs.stat('/usr/sbin/nft').then(function() { return true; }).catch(function() {
-				return fs.stat('/sbin/fw4').then(function() { return true; }).catch(function() { return false; });
+			fs.stat('/sbin/fw4').then(function() { return true; }).catch(function() {
+				return fs.stat('/usr/sbin/fw4').then(function() { return true; }).catch(function() { return false; });
 			})
 		]);
 	},
