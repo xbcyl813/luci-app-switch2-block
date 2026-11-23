@@ -216,9 +216,6 @@ msgstr "检测执行失败: "
 msgid "Default example MAC (11:22:33:44:55:66) is still in the device list! Please replace it with your real Switch MAC address before saving."
 msgstr "受控主机列表中仍存在默认示例 MAC（11:22:33:44:55:66）！请先将其修改为您的 Switch 真实 MAC 地址后再保存并应用。"
 
-msgid "Please add at least one Switch MAC address in the Controlled Devices list before enabling!"
-msgstr "启用保护前，请至少在「受控主机列表」中添加一台 Switch 设备的 MAC 地址！"
-
 msgid "Configuration Error"
 msgstr "配置错误"
 
@@ -230,3 +227,9 @@ msgstr "取消"
 
 msgid "Confirm & Save"
 msgstr "确认并保存"
+
+msgid "Normal (All %d domains resolved to %s), IPv6 DNS resolution blocked"
+msgstr "正常 (全部 %d 个域名均已解析至 %s)，ipv6域名解析已禁止。"
+
+msgid "Normal (All %d domains resolved to %s), but IPv6 DNS resolution is NOT blocked"
+msgstr "正常 (全部 %d 个域名均已解析至 %s)，但 ipv6域名解析未禁止"
