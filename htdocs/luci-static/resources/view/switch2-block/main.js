@@ -38,35 +38,61 @@ return view.extend({
 		};
 	},
 
-	handleTestSpoof: function(m, enableOpt, forceDhcpOpt, lanOpt, spoofOpt, domainOpt, fwModeOpt, isFw4, netDefaults) {
+	normalizeDomains: function(rawDomains, fallbackList) {
+		var arr = Array.isArray(rawDomains) ? rawDomains : (rawDomains ? [rawDomains] : []);
+		var res = [];
+		for (var i = 0; i < arr.length; i++) {
+			var d = String(arr[i] || '').trim();
+			if (d !== '' && res.indexOf(d) === -1) {
+				res.push(d);
+			}
+		}
+		return res.length > 0 ? res : (fallbackList || []);
+	},
+
+	hasUnsavedDeviceChanges: function(devGridSection) {
+		var changes = uci.changes();
+		if (changes && changes['switch2-block']) {
+			var secChanges = changes['switch2-block'];
+			for (var k in secChanges) {
+				if (Object.prototype.hasOwnProperty.call(secChanges, k)) {
+					var st = uci.get('switch2-block', k);
+					if (!st || st['.type'] === 'device') {
+						return true;
+					}
+				}
+			}
+		}
+		if (devGridSection && typeof devGridSection.cfgsections === 'function') {
+			var curSids = devGridSection.cfgsections();
+			var savedSids = (uci.sections('switch2-block', 'device') || []).map(function(s) { return s['.name']; });
+			if (curSids.length !== savedSids.length) {
+				return true;
+			}
+		}
+		return false;
+	},
+
+	handleTestSpoof: function(m, enableOpt, forceDhcpOpt, lanOpt, spoofOpt, domainOpt, fwModeOpt, devSection, isFw4, netDefaults) {
 		var savedEnabled = uci.get('switch2-block', 'global', 'enabled') || '0';
 		var savedForceDhcp = uci.get('switch2-block', 'global', 'force_dhcp') || '0';
 		var savedLanIp = uci.get('switch2-block', 'global', 'lan_ip') || netDefaults.lanIp || '';
 		var savedSpoofIp = uci.get('switch2-block', 'global', 'spoof_ip') || netDefaults.spoofIp || '';
 		var savedFwMode = uci.get('switch2-block', 'global', 'fw_mode') || 'firewall_user';
-
-		var rawSavedDomains = uci.get('switch2-block', 'global', 'test_domain');
-		var savedDomains = Array.isArray(rawSavedDomains)
-			? rawSavedDomains
-			: (rawSavedDomains ? [rawSavedDomains] : ['ctest.p01.ctest.srv.nintendo.net']);
+		var savedDomains = this.normalizeDomains(
+			uci.get('switch2-block', 'global', 'test_domain'),
+			['ctest.p01.ctest.srv.nintendo.net']
+		);
 
 		var curEnabled = enableOpt ? enableOpt.formvalue('global') : savedEnabled;
 		var curForceDhcp = forceDhcpOpt ? forceDhcpOpt.formvalue('global') : savedForceDhcp;
 		var curLanIp = lanOpt ? (lanOpt.formvalue('global') || savedLanIp) : savedLanIp;
 		var curSpoofIp = spoofOpt ? (spoofOpt.formvalue('global') || savedSpoofIp) : savedSpoofIp;
 		var curFwMode = fwModeOpt ? (fwModeOpt.formvalue('global') || savedFwMode) : savedFwMode;
-
-		var rawCurDomains = domainOpt ? domainOpt.formvalue('global') : savedDomains;
-		if (!Array.isArray(rawCurDomains)) {
-			rawCurDomains = rawCurDomains ? [rawCurDomains] : [];
-		}
-		var curDomains = [];
-		for (var i = 0; i < rawCurDomains.length; i++) {
-			var d = String(rawCurDomains[i] || '').trim();
-			if (d !== '') {
-				curDomains.push(d);
-			}
-		}
+		var curDomains = this.normalizeDomains(
+			domainOpt ? domainOpt.formvalue('global') : savedDomains,
+			['ctest.p01.ctest.srv.nintendo.net']
+		);
 
 		if (curEnabled !== '1') {
 			ui.addNotification(null, E('p', _('Spoof & Blocker is currently disabled. Please enable it and click Save & Apply first.')), 'warning');
@@ -74,9 +100,10 @@ return view.extend({
 		}
 
 		var pendingChanges = uci.changes();
-		var hasPendingUci = pendingChanges && pendingChanges['switch2-block'] && pendingChanges['switch2-block'].length > 0;
+		var hasPendingUci = pendingChanges && pendingChanges['switch2-block'] && Object.keys(pendingChanges['switch2-block']).length > 0;
 
 		if (hasPendingUci ||
+			this.hasUnsavedDeviceChanges(devSection) ||
 			curEnabled !== savedEnabled ||
 			curForceDhcp !== savedForceDhcp ||
 			curLanIp !== savedLanIp ||
@@ -92,10 +119,6 @@ return view.extend({
 			return;
 		}
 
-		if (curDomains.length === 0) {
-			curDomains = ['ctest.p01.ctest.srv.nintendo.net'];
-		}
-
 		var devices = uci.sections('switch2-block', 'device') || [];
 		var hasBlockDevice = false;
 		for (var idx = 0; idx < devices.length; idx++) {
@@ -109,7 +132,9 @@ return view.extend({
 		ui.showModal(_('Running Connectivity Self-Test...'), [
 			E('p', { 'class': 'spinning' }, _('Calling test.sh to verify DNS hijacking, uHTTPd 2-byte response, port 80 usage, and firewall rules...'))
 		]);
-		var targetFwFile = (isFw4 && curFwMode === 'nftables_d')
+
+		var effectiveFwMode = isFw4 ? curFwMode : 'firewall_user';
+		var targetFwFile = (isFw4 && effectiveFwMode === 'nftables_d')
 			? '/etc/nftables.d/99-switch2-block.nft'
 			: '/etc/firewall.user';
 
@@ -126,19 +151,21 @@ return view.extend({
 			var res = results[0];
 			var fwRuleInFile = results[1];
 			var rawOut = (res.stdout || '') + (res.stderr || '');
-			var dnsOut = '', httpHeader = '', bodyLen = '0', body = '', portOwner = '', fwActiveRules = '';
+			var dnsOut = '', aaaaCheckOut = '', httpHeader = '', bodyLen = '0', body = '', portOwner = '', fwActiveRules = '';
 
-			var mDns = rawOut.match(new RegExp('=== DNS_RESULT ===\\n([\\s\\S]*?)\\n=== HTTP_HEADER ==='));
-			var mHdr = rawOut.match(new RegExp('=== HTTP_HEADER ===\\n([\\s\\S]*?)\\n=== HTTP_BODY_LEN ==='));
-			var mLen = rawOut.match(new RegExp('=== HTTP_BODY_LEN ===\\n([\\s\\S]*?)\\n=== HTTP_BODY ==='));
-			var mBody = rawOut.match(new RegExp('=== HTTP_BODY ===\\n([\\s\\S]*?)\\n=== HTTP_PORT_OWNER ==='));
-			var mPort = rawOut.match(new RegExp('=== HTTP_PORT_OWNER ===\\n([\\s\\S]*?)\\n=== FW_ACTIVE_RULES ==='));
-			var mFw = rawOut.match(new RegExp('=== FW_ACTIVE_RULES ===\\n([\\s\\S]*)$'));
+			var mDns = rawOut.match(/=== DNS_RESULT ===\n([\s\S]*?)\n=== DNS_AAAA_CHECK ===/);
+			var mAaaa = rawOut.match(/=== DNS_AAAA_CHECK ===\n([\s\S]*?)\n=== HTTP_HEADER ===/);
+			var mHdr = rawOut.match(/=== HTTP_HEADER ===\n([\s\S]*?)\n=== HTTP_BODY_LEN ===/);
+			var mLen = rawOut.match(/=== HTTP_BODY_LEN ===\n([\s\S]*?)\n=== HTTP_BODY ===/);
+			var mBody = rawOut.match(/=== HTTP_BODY ===\n([\s\S]*?)\n=== HTTP_PORT_OWNER ===/);
+			var mPort = rawOut.match(/=== HTTP_PORT_OWNER ===\n([\s\S]*?)\n=== FW_ACTIVE_RULES ===/);
+			var mFw = rawOut.match(/=== FW_ACTIVE_RULES ===\n([\s\S]*)$/);
 
 			if (mDns && mDns[1]) dnsOut = mDns[1].trim();
+			if (mAaaa && mAaaa[1]) aaaaCheckOut = mAaaa[1].trim();
 			if (mHdr && mHdr[1]) httpHeader = mHdr[1].trim();
 			if (mLen && mLen[1]) bodyLen = mLen[1].trim();
-			if (mBody && mBody[1]) body = mBody[1];
+			if (mBody && mBody[1]) body = mBody[1].replace(/\n$/, '');
 			if (mPort && mPort[1]) portOwner = mPort[1].trim();
 			if (mFw && mFw[1]) fwActiveRules = mFw[1].trim();
 
@@ -153,51 +180,83 @@ return view.extend({
 			}
 			var fwActiveCount = fwRuleLines.length;
 
-			var answerParts = dnsOut.split('Name:').slice(1);
-			var dnsOk = (answerParts.length >= curDomains.length);
-			if (dnsOk) {
-				for (var k = 0; k < answerParts.length; k++) {
-					if (answerParts[k].indexOf(curSpoofIp) === -1) {
+			/* 兼容不同 nslookup 输出格式：逐段检查是否包含目标 spoofIp */
+			var dnsOk = curDomains.length > 0 && dnsOut.indexOf(curSpoofIp) !== -1;
+			if (dnsOk && curDomains.length > 1) {
+				for (var k = 0; k < curDomains.length; k++) {
+					if (dnsOut.indexOf(curDomains[k]) === -1) {
 						dnsOk = false;
 						break;
 					}
 				}
 			}
 
+			/* 检查 IPv6 AAAA 域名解析是否已屏蔽，并根据实际设置的 curSpoofIp 动态格式化结果 */
+			var ipv6Blocked = aaaaCheckOut.indexOf('IPV6_BLOCKED=1') !== -1;
+			var dnsStatusText;
+			if (dnsOk && ipv6Blocked) {
+				dnsStatusText = _('Normal (All %d domains resolved to %s), IPv6 DNS resolution blocked').format(curDomains.length, curSpoofIp);
+			} else if (dnsOk && !ipv6Blocked) {
+				dnsStatusText = _('Normal (All %d domains resolved to %s), but IPv6 DNS resolution is NOT blocked').format(curDomains.length, curSpoofIp);
+			} else {
+				dnsStatusText = _('Abnormal (Target IP not matched; check global DNS redirect or proxy hijacking)');
+			}
+
 			var httpOk = httpHeader.indexOf('200 OK') !== -1 && body === 'ok' && bodyLen === '2';
 
 			var portStatusColor, portStatusText;
-			if (!portOwner) {
-				portStatusColor = '#d9534f';
-				portStatusText = _('Abnormal: No listener detected on %s:80 (uHTTPd helper instance not running)').format(curSpoofIp);
-			} else if (portOwner.indexOf('uhttpd') !== -1 && portOwner.indexOf('nginx') === -1) {
-				portStatusColor = 'green';
-				portStatusText = _('Normal (Exclusively bound by uHTTPd on %s:80, no port conflict)').format(curSpoofIp);
-			} else {
+			var spoofBound = false;
+			var conflictProc = '';
+			if (portOwner) {
+				var pLines = portOwner.split('\n');
+				for (var pl = 0; pl < pLines.length; pl++) {
+					var line = pLines[pl].trim();
+					if (!line) continue;
+					var hitsSpoof = (line.indexOf(curSpoofIp + ':80') !== -1);
+					var hitsWildcard = (line.indexOf('0.0.0.0:80') !== -1 || line.indexOf('*:80') !== -1);
+					if (hitsSpoof) {
+						if (line.indexOf('uhttpd') !== -1) {
+							spoofBound = true;
+						} else {
+							conflictProc = line;
+						}
+					} else if (hitsWildcard && line.indexOf('uhttpd') === -1) {
+						conflictProc = line;
+					}
+				}
+			}
+
+			if (conflictProc) {
 				var procName = _('Other Web Service');
-				var pStart = portOwner.indexOf('(("');
+				var pStart = conflictProc.indexOf('(("');
 				if (pStart !== -1) {
-					var pEnd = portOwner.indexOf('"', pStart + 3);
+					var pEnd = conflictProc.indexOf('"', pStart + 3);
 					if (pEnd !== -1) {
-						procName = portOwner.substring(pStart + 3, pEnd);
+						procName = conflictProc.substring(pStart + 3, pEnd);
 					}
 				}
 				portStatusColor = '#d9534f';
 				portStatusText = _('Conflict: Port 80 is globally occupied by "%s"! Please bind it only to Main LAN IP (%s:80)').format(procName, curLanIp);
+			} else if (spoofBound) {
+				portStatusColor = 'green';
+				portStatusText = _('Normal (Exclusively bound by uHTTPd on %s:80, no port conflict)').format(curSpoofIp);
+			} else {
+				portStatusColor = '#d9534f';
+				portStatusText = _('Abnormal: No listener detected on %s:80 (uHTTPd helper instance not running)').format(curSpoofIp);
 			}
 
 			var fwStatusColor, fwStatusText;
 			if (!hasBlockDevice) {
-				fwStatusColor = 'green';
+				fwStatusColor = 'red';
 				fwStatusText = _('Skipped (No device enabled for WAN blocking)');
 			} else if (fwRuleInFile && fwActiveCount > 0) {
 				fwStatusColor = 'green';
 				fwStatusText = _('Written to %s and active in kernel firewall (%d rules)').format(targetFwFile, fwActiveCount);
 			} else if (fwRuleInFile && fwActiveCount === 0) {
 				fwStatusColor = '#d9534f';
-				if (isFw4 && curFwMode === 'nftables_d') {
+				if (isFw4 && effectiveFwMode === 'nftables_d') {
 					fwStatusText = _('Written to %s, but not loaded by kernel! Please switch "fw4 Firewall Rule Mode" to "/etc/firewall.user" and Save & Apply.').format(targetFwFile);
-				} else if (isFw4 && curFwMode === 'firewall_user') {
+				} else if (isFw4 && effectiveFwMode === 'firewall_user') {
 					fwStatusText = _('Written to %s, but not loaded by kernel! Please switch "fw4 Firewall Rule Mode" to "/etc/nftables.d/" and Save & Apply.').format(targetFwFile);
 				} else {
 					fwStatusText = _('Written to %s, but not loaded by kernel! Please check if the firewall service is running properly.').format(targetFwFile);
@@ -212,8 +271,7 @@ return view.extend({
 			var modalNode = ui.showModal(_('Self-Test Results'), [
 				E('div', { 'style': 'margin-bottom: 6px;' }, [
 					E('strong', {}, _('1. DNS Hijacking Status:')),
-					E('span', { 'style': 'color:' + (dnsOk ? 'green' : 'red') + '; font-weight:bold;' },
-						dnsOk ? _('Normal (All %d domains resolved to %s)').format(curDomains.length, curSpoofIp) : _('Abnormal (Target IP not matched; check global DNS redirect or proxy hijacking)'))
+					E('span', { 'style': 'color:' + ((dnsOk && ipv6Blocked) ? 'green' : 'red') + '; font-weight:bold;' }, dnsStatusText)
 				]),
 				E('pre', { 'style': preBaseStyle + 'max-height:185px;' }, dnsOut || _('No output')),
 
@@ -256,10 +314,11 @@ return view.extend({
 			ui.addNotification(null, E('p', _('Self-test execution failed: ') + err.message), 'error');
 		});
 	},
+
 	render: function(data) {
 		var isFw4 = data[2];
 		var netDefaults = this.detectNetworkDefaults();
-		var m, s, o, enableOpt, forceDhcpOpt, lanOpt, spoofOpt, domainOpt, fwModeOpt;
+		var m, s, o, enableOpt, forceDhcpOpt, lanOpt, spoofOpt, domainOpt, fwModeOpt, s2;
 
 		m = new form.Map('switch2-block', _('Nintendo Switch 2 Connection Spoof & Update Blocker'),
 			_('Emulate Nintendo connection test responses via isolated dnsmasq and uHTTPd instances so Switch 2 / Switch 1 can pass network checks without external internet access.') + '<br/>' +
@@ -339,10 +398,10 @@ return view.extend({
 		o.inputtitle = _('Run Connectivity Self-Test');
 		o.inputstyle = 'apply';
 		o.onclick = L.bind(function() {
-			return this.handleTestSpoof(m, enableOpt, forceDhcpOpt, lanOpt, spoofOpt, domainOpt, fwModeOpt, isFw4, netDefaults);
+			return this.handleTestSpoof(m, enableOpt, forceDhcpOpt, lanOpt, spoofOpt, domainOpt, fwModeOpt, s2, isFw4, netDefaults);
 		}, this);
 
-		var s2 = m.section(form.GridSection, 'device', _('Controlled Devices (MAC-based DNS & Firewall Isolation)'),
+		s2 = m.section(form.GridSection, 'device', _('Controlled Devices (MAC-based DNS & Firewall Isolation)'),
 			_('Listed devices set to Automatic (DHCP) will receive the dedicated spoof DNS and optional WAN isolation. If this list is left empty while enabled, the plugin runs in Manual DNS Mode: you must manually set a static IP and use the Spoof Helper IP as DNS on your Switch (note: firewall-level MAC blocking will not apply).'));
 		s2.addremove = true;
 		s2.anonymous = true;
@@ -390,15 +449,16 @@ return view.extend({
 			var curSpoofIp = String(spoofOpt.formvalue('global') || '').trim();
 
 			if (curEnabled === '1') {
-				var devSections = uci.sections('switch2-block', 'device');
+				var devSections = s2.cfgsections ? s2.cfgsections() : [];
 				var hasDefaultMac = false;
 				var validCount = 0;
 
 				for (var i = 0; i < devSections.length; i++) {
-					var sid = devSections[i]['.name'];
+					var sid = devSections[i];
 					var valMac = macOpt.formvalue(sid);
 					if (valMac === undefined || valMac === null) {
-						valMac = devSections[i].mac;
+						var secObj = uci.get('switch2-block', sid);
+						valMac = secObj ? secObj.mac : '';
 					}
 					var cleanMac = String(valMac || '').trim().toUpperCase();
 					if (cleanMac === '11:22:33:44:55:66') {
@@ -456,6 +516,5 @@ return view.extend({
 		};
 
 		return m.render();
-
 	}
 });
